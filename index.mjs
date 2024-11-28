@@ -1,5 +1,3 @@
-# vod-to-live-streaming
-```
 import { spawnSync } from 'child_process';
 import { mkdirSync } from 'fs';
 import path from 'path';
@@ -49,4 +47,3 @@ const convertHlsToMp3 = async ({ fileUri }) => {
     const result = await handler({ Input: { inputHLS: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' } });
     console.log(JSON.stringify(result, null, 2));
 })()
-```
