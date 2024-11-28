@@ -120,7 +120,7 @@ export const handler = async (event) => {
         if (event.Input?.inputHLS?.length > 0) {
             const localDirectory = extractPathSegment(event.Input.inputHLS);
             await downloadManifestAndSegments(event.Input.inputHLS, localDirectory);
-            await uploadToS3(s3BasePath);
+            await uploadToS3(localDirectory);
         }
     } catch (error) {
         console.error('Error', error);
