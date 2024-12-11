@@ -8,7 +8,8 @@ import axios from 'axios';
 const destinationBucket = 'eu-north-1-stage-video-stest-mc-output';
 const s3Client = new S3Client({ region: 'eu-north-1' });
 const ffmpegPath = 'ffmpeg';
-const mediaPackageIngestUrl = 'https://l0229q-1.ingest.xr65xh.mediapackagev2.eu-north-1.amazonaws.com/in/v1/eu-north-1-stage-stest/1/test-ingest-03/index';
+const mediaPackageIngestUrl = 'https://l0229q-1.ingest.xr65xh.mediapackagev2.eu-north-1.amazonaws.com/in/v1/eu-north-1-stage-stest/1/test-ingest-02/index';
+const currentSequenceNo = 559;
 /*
 export const handler = async (event) => {
     console.log(JSON.stringify(event, null, 2));
@@ -47,7 +48,6 @@ const convertHlsToMp3 = async ({ fileUri }) => {
     }
 };
 */
-
 
 const downloadManifestAndSegments = async (manifestUrl, downloadDir) => {
     try {
@@ -142,53 +142,55 @@ const ingestHlsToMediaPackage = async (manifestDir, manifestUrl) => {
         const childManifestFiles = mainManifestContent.split('\n').filter(line => line && !line.startsWith('#'));
         for (const childManifestFile of childManifestFiles) {
             const childManifestFileContent = fs.readFileSync(path.join(manifestDir, childManifestFile), 'utf8');
-            //const segments = childManifestFileContent.split('\n').filter(line => line.endsWith('.ts'));
-            const segments = [
-                'index1080p_hls_00559.ts',
-                'index1080p_hls_00560.ts',
-                'index1080p_hls_00561.ts',
-                'index1080p_hls_00562.ts',
-                'index1080p_hls_00563.ts',
-                'index1080p_hls_00564.ts',
-                'index1080p_hls_00565.ts',
-                'index1080p_hls_00566.ts',
-                'index1080p_hls_00567.ts',
-                'index1080p_hls_00568.ts'
-            ];
-            let segmentCounterForSegmentUrl = 591;
+            const segments = childManifestFileContent.split('\n').filter(line => line.endsWith('.ts'));
             console.log(`Found ${segments.length} segments in manifest.`);
-            
+
+            let segmentCounterForSegmentUrl = currentSequenceNo;
             for (const segment of segments) {
                 const segmentIngestUrl = mediaPackageIngestUrl.replace('index', segment.replace(/(\d+\.ts)$/, `00${segmentCounterForSegmentUrl++}.ts`));
                 console.log(`Uploading segment to: ${segmentIngestUrl}`);
                 const segmentData = fs.readFileSync(path.join(manifestDir, segment));
-                
+
                 await axios.put(segmentIngestUrl, segmentData, {
                     headers: {
                         'Content-Type': 'video/MP2T',
                     },
                 });
-                
-                //await uploadManifestSegmentsToS3(path.join(manifestDir, segment), segmentData);
                 console.log(`Uploaded segment: ${segment}`);
             }
-                
-            
+
             console.log(`Uploaded all segments for manifest: ${childManifestFile}`);
             const childManifestIngestUrl = mediaPackageIngestUrl.replace('index', childManifestFile);
             console.log(`Uploading child manifest to: ${childManifestIngestUrl}`);
-            await axios.put(childManifestIngestUrl, childManifestFileContent, {
+            let modifiedChildManifestContent = childManifestFileContent.replace(
+                /#EXT-X-MEDIA-SEQUENCE:\d+/,
+                `#EXT-X-MEDIA-SEQUENCE:${currentSequenceNo}`
+            );
+
+            let segmentCounterForManifestFile = currentSequenceNo;
+            modifiedChildManifestContent = modifiedChildManifestContent.replace(/index1080p_hls_\d+\.ts/g, () => {
+                return `index1080p_hls_00${segmentCounterForManifestFile++}.ts`;
+            });
+            console.log('Modified Child Manifest:.........................');
+            console.log(modifiedChildManifestContent);
+
+            await axios.put(childManifestIngestUrl, modifiedChildManifestContent, {
                 headers: {
                     'Content-Type': 'application/vnd.apple.mpegurl',
                 },
             });
-            
-            //await uploadManifestSegmentsToS3(path.join(manifestDir, childManifestFile), childManifestFileContent);
             console.log(`Uploaded child manifest: ${childManifestIngestUrl}`);
         }
         
         const mainManifestIngestUrl = `${mediaPackageIngestUrl}.m3u8`
         console.log(`Uploading main manifest: ${mainManifestIngestUrl}`);
+        const modifiedMainManifestContent = mainManifestContent.replace(/(\w+\.m3u8)/, (match) => {
+            let [filename, extension] = match.split('.'); 
+            return `${filename}_${currentSequenceNo}.${extension}`;
+        });
+        console.log('Modified Main Manifest:.........................');
+        console.log(modifiedMainManifestContent);
+
         await axios.put(mainManifestIngestUrl, mainManifestContent, {
             headers: {
                 'Content-Type': 'application/vnd.apple.mpegurl',

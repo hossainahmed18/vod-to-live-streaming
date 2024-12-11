@@ -2,3 +2,6 @@
 tmp*
 ffmpeg
 node_modules
+*/hls*
+*.ts
+*.m3u8
