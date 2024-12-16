@@ -10,10 +10,9 @@ const s3Client = new S3Client({ region: 'eu-north-1' });
 const ffmpegPath = 'ffmpeg';
 
 const mediaPackageIngestUrl = '';
-let currentSequenceNo = 559;
+let currentSequenceNo = 560;
 const segmentDuration = '6.00000';
 const childManifestFile = 'index1080p.m3u8';
-const mainManifestName = 'index.m3u8';
 const segmentNamePrefix = 'index1080p_hls';
 
 const streamConfigs = [
@@ -99,10 +98,9 @@ const generateMainManifest = (streams) => {
     return manifest;
 }
 
-const ingestHlsToMediaPackage = async (manifestDir, manifestUrl) => {
+const ingestHlsToMediaPackage = async (manifestDir) => {
     try {
         const segments = [
-            'index1080p_hls_00559.ts',
             'index1080p_hls_00560.ts',
             'index1080p_hls_00561.ts',
             'index1080p_hls_00562.ts',
@@ -111,47 +109,33 @@ const ingestHlsToMediaPackage = async (manifestDir, manifestUrl) => {
             'index1080p_hls_00565.ts',
             'index1080p_hls_00566.ts',
             'index1080p_hls_00567.ts',
-            'index1080p_hls_00568.ts'
+            'index1080p_hls_00568.ts',
+            'index1080p_hls_00569.ts',
         ];
-        let segmentCounterForSegmentUrl = currentSequenceNo;
         const newSegmentList = [];
-        for (const segment of segments) {
-            const newSegmentName = `${segmentNamePrefix}_00${segmentCounterForSegmentUrl++}.ts`;
+        for (const [index, segment] of segments.entries()) {
+            const newSegmentName = `${segmentNamePrefix}_00${currentSequenceNo + index}.ts`;
             newSegmentList.push(newSegmentName);
             const segmentIngestUrl = mediaPackageIngestUrl.replace('index', newSegmentName);
-            const segmentData = fs.readFileSync(path.join(manifestDir, segment));
-            const newSegmentPath = path.join(manifestDir, newSegmentName);
-            fs.writeFileSync(newSegmentPath, segmentData);
-            const newSegmentContent = fs.readFileSync(newSegmentPath);
-            console.log(`Uploading segment to: ${segmentIngestUrl}`);
-
-            await axios.put(segmentIngestUrl, newSegmentContent, {
-                headers: {
-                    'Content-Type': 'video/MP2T',
-                },
+            const segmentData = fs.readFileSync(path.join(manifestDir, segment));           
+            await axios.put(segmentIngestUrl, segmentData, {
+                headers: { 'Content-Type': 'video/MP2T' },
             });
-            console.log(`Uploaded segment: ${segment}`);
+            console.log(`Uploaded segment: ${newSegmentName}`);
         }
         const childManifestIngestUrl = mediaPackageIngestUrl.replace('index', childManifestFile);
         const childManifestFileContent = generateHLSChildManifest(newSegmentList, segmentDuration);
-        fs.writeFileSync(path.join(manifestDir, childManifestFile), childManifestFileContent);
-        const childManifestIngestContent = fs.readFileSync(path.join(manifestDir, childManifestFile));
 
-        await axios.put(childManifestIngestUrl, childManifestIngestContent , {
+        await axios.put(childManifestIngestUrl, childManifestFileContent , {
             headers: {
                 'Content-Type': 'application/vnd.apple.mpegurl',
             },
         });
         console.log(`Uploaded child manifest: ${childManifestIngestUrl}`);
-        console.log(childManifestIngestContent);
 
-        const mainManifest = generateMainManifest(streamConfigs);
-        fs.writeFileSync(path.join(manifestDir, mainManifestName), mainManifest);
-
+        const mainManifestContent = generateMainManifest(streamConfigs);
         const mainManifestIngestUrl = `${mediaPackageIngestUrl}.m3u8`
-        const mainManifestContent = fs.readFileSync(path.join(manifestDir, mainManifestName));
         console.log(`Uploading main manifest to: ${mainManifestIngestUrl}`);
-        console.log(mainManifestContent);
         await axios.put(mainManifestIngestUrl, mainManifestContent, {
             headers: {
                 'Content-Type': 'application/vnd.apple.mpegurl',
@@ -174,7 +158,7 @@ export const handler = async (event) => {
         if (event.Input?.inputHLS?.length > 0) {
             const localDirectory = extractPathSegment(event.Input.inputHLS);
             //await downloadManifestAndSegments(event.Input.inputHLS, localDirectory);
-            await ingestHlsToMediaPackage(localDirectory, event.Input.inputHLS);
+            await ingestHlsToMediaPackage(localDirectory);
         }
     } catch (error) {
         console.error('Error', error);
