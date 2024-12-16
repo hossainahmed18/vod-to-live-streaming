@@ -8,45 +8,24 @@ import axios from 'axios';
 const destinationBucket = 'eu-north-1-stage-video-stest-mc-output';
 const s3Client = new S3Client({ region: 'eu-north-1' });
 const ffmpegPath = 'ffmpeg';
-const mediaPackageIngestUrl = 'https://l0229q-1.ingest.xr65xh.mediapackagev2.eu-north-1.amazonaws.com/in/v1/eu-north-1-stage-stest/1/test-ingest-03/index';
-/*
-export const handler = async (event) => {
-    console.log(JSON.stringify(event, null, 2));
-    try {
-        if (event.Input?.inputHLS) {
-            mkdirSync(localDirectory, { recursive: true });
-            await convertHlsToMp3({ fileUri: event.Input.inputHLS });
-        }
-    } catch (error) {
-        console.error('Error', error);
-    }
-};
 
-const convertHlsToMp3 = async ({ fileUri }) => {
-    const fileNameWithoutExtension = path.parse(fileUri).name;
-    const tempFolderPath = `${localDirectory}/converted`;
-    mkdirSync(tempFolderPath, { recursive: true });
-    const tempFilePath = `${tempFolderPath}/${fileNameWithoutExtension}.mp3`;
-    try {
-        const ffmpegCommand = [
-            '-y',         
-            '-i', fileUri, 
-            '-vn',       
-            '-acodec', 'libmp3lame', 
-            '-q:a', '0',  
-            tempFilePath 
-        ];
-        const result = spawnSync(ffmpegPath, ffmpegCommand, { stdio: 'inherit' });
+const mediaPackageIngestUrl = '';
+let currentSequenceNo = 559;
+const segmentDuration = '6.00000';
+const childManifestFile = 'index1080p.m3u8';
+const mainManifestName = 'index.m3u8';
+const segmentNamePrefix = 'index1080p_hls';
 
-        if (result.error) {
-            console.error('FFmpeg Error:', result.error.message);
-        }
-        console.log('Conversion completed:', tempFilePath);
-    } catch (error) {
-        console.error('Error during conversion:', error.message);
+const streamConfigs = [
+    {
+        fileName: 'index1080p.m3u8',
+        bandwidth: 5666069,
+        avgBandwidth: 5271919,
+        codecs: 'avc1.4d4028,mp4a.40.2',
+        resolution: '1920x1080',
+        frameRate: 30.000,
     }
-};
-*/
+];
 
 
 const downloadManifestAndSegments = async (manifestUrl, downloadDir) => {
@@ -71,6 +50,7 @@ const downloadManifestAndSegments = async (manifestUrl, downloadDir) => {
             const childManifestPath = path.join(downloadDir, path.basename(childManifestUrl));
             fs.writeFileSync(childManifestPath, childManifestContent);
             const segmentFiles = childManifestContent.split('\n').filter(line => line && !line.startsWith('#'));
+
             for (const segment of segmentFiles) {
                 const segmentUrl = new URL(segment, manifestUrl).href;
                 const segmentName = path.basename(segment);
@@ -90,105 +70,88 @@ const downloadManifestAndSegments = async (manifestUrl, downloadDir) => {
         throw error;
     }
 };
-/*
-const uploadToS3 = async (uploadDir) => {
-    try {
-        const s3Client = new S3Client({ region: 'eu-north-1' });
-        const files = fs.readdirSync(uploadDir);
 
-        for (const file of files) {
-            const filePath = path.join(uploadDir, file);
-            const s3Key = `${uploadDir}/${file}`;
+const generateHLSChildManifest = (segments, segmentDuration) => {
+    const programDateTime = new Date().toISOString();
+    let manifest = "#EXTM3U\n";
+    manifest += "#EXT-X-VERSION:3\n";
+    manifest += `#EXT-X-TARGETDURATION:${Math.round(Number(segmentDuration))}\n`;
+    manifest += `#EXT-X-MEDIA-SEQUENCE:${currentSequenceNo}\n`;
+    manifest += `#EXT-X-PROGRAM-DATE-TIME:${programDateTime}\n`;
+    segments.forEach(segment => {
+        manifest += `#EXTINF:${segmentDuration},\n`;
+        manifest += `${segment}\n`;
+    });
+    return manifest;
+}
 
-            console.log(`Uploading ${filePath} to s3://${destinationBucket}/${s3Key}`);
-            const fileContent = fs.readFileSync(filePath);
+const generateMainManifest = (streams) => {
 
-            const command = new PutObjectCommand({
-                Bucket: destinationBucket,
-                Key: s3Key,
-                Body: fileContent,
-            });
+    let manifest = "#EXTM3U\n";
+    manifest += "#EXT-X-VERSION:3\n";
+    manifest += "#EXT-X-INDEPENDENT-SEGMENTS\n";
 
-            await s3Client.send(command);
-            console.log(`Uploaded: ${filePath}`);
-        }
+    streams.forEach(stream => {
+        manifest += `#EXT-X-STREAM-INF:BANDWIDTH=${stream.bandwidth},AVERAGE-BANDWIDTH=${stream.avgBandwidth},CODECS="${stream.codecs}",RESOLUTION=${stream.resolution},FRAME-RATE=${stream.frameRate.toFixed(3)}\n`;
+        manifest += `${stream.fileName}\n`;
+    });
 
-        console.log('All files uploaded successfully!');
-    } catch (error) {
-        console.error('Error uploading to S3:', error);
-        throw error;
-    }
-};
-*/
-
-const uploadManifestSegmentsToS3 = async (fileKey, fileContent) => {
-    try {
-        const command = new PutObjectCommand({
-            Bucket: destinationBucket,
-            Key: fileKey,
-            Body: fileContent,
-        });
-        await s3Client.send(command);
-    } catch (error) {
-        console.error('Error uploading to S3:', error);
-        throw error;
-    }
-};
+    return manifest;
+}
 
 const ingestHlsToMediaPackage = async (manifestDir, manifestUrl) => {
     try {
+        const segments = [
+            'index1080p_hls_00559.ts',
+            'index1080p_hls_00560.ts',
+            'index1080p_hls_00561.ts',
+            'index1080p_hls_00562.ts',
+            'index1080p_hls_00563.ts',
+            'index1080p_hls_00564.ts',
+            'index1080p_hls_00565.ts',
+            'index1080p_hls_00566.ts',
+            'index1080p_hls_00567.ts',
+            'index1080p_hls_00568.ts'
+        ];
+        let segmentCounterForSegmentUrl = currentSequenceNo;
+        const newSegmentList = [];
+        for (const segment of segments) {
+            const newSegmentName = `${segmentNamePrefix}_00${segmentCounterForSegmentUrl++}.ts`;
+            newSegmentList.push(newSegmentName);
+            const segmentIngestUrl = mediaPackageIngestUrl.replace('index', newSegmentName);
+            const segmentData = fs.readFileSync(path.join(manifestDir, segment));
+            const newSegmentPath = path.join(manifestDir, newSegmentName);
+            fs.writeFileSync(newSegmentPath, segmentData);
+            const newSegmentContent = fs.readFileSync(newSegmentPath);
+            console.log(`Uploading segment to: ${segmentIngestUrl}`);
 
-        const mainManifestContent = fs.readFileSync(`${manifestDir}/${path.basename(manifestUrl)}`, 'utf8');
-        const childManifestFiles = mainManifestContent.split('\n').filter(line => line && !line.startsWith('#'));
-        for (const childManifestFile of childManifestFiles) {
-            const childManifestFileContent = fs.readFileSync(path.join(manifestDir, childManifestFile), 'utf8');
-            //const segments = childManifestFileContent.split('\n').filter(line => line.endsWith('.ts'));
-            const segments = [
-                'index1080p_hls_00559.ts',
-                'index1080p_hls_00560.ts',
-                'index1080p_hls_00561.ts',
-                'index1080p_hls_00562.ts',
-                'index1080p_hls_00563.ts',
-                'index1080p_hls_00564.ts',
-                'index1080p_hls_00565.ts',
-                'index1080p_hls_00566.ts',
-                'index1080p_hls_00567.ts',
-                'index1080p_hls_00568.ts'
-            ];
-            let segmentCounterForSegmentUrl = 591;
-            console.log(`Found ${segments.length} segments in manifest.`);
-            
-            for (const segment of segments) {
-                const segmentIngestUrl = mediaPackageIngestUrl.replace('index', segment.replace(/(\d+\.ts)$/, `00${segmentCounterForSegmentUrl++}.ts`));
-                console.log(`Uploading segment to: ${segmentIngestUrl}`);
-                const segmentData = fs.readFileSync(path.join(manifestDir, segment));
-                
-                await axios.put(segmentIngestUrl, segmentData, {
-                    headers: {
-                        'Content-Type': 'video/MP2T',
-                    },
-                });
-                
-                //await uploadManifestSegmentsToS3(path.join(manifestDir, segment), segmentData);
-                console.log(`Uploaded segment: ${segment}`);
-            }
-                
-            
-            console.log(`Uploaded all segments for manifest: ${childManifestFile}`);
-            const childManifestIngestUrl = mediaPackageIngestUrl.replace('index', childManifestFile);
-            console.log(`Uploading child manifest to: ${childManifestIngestUrl}`);
-            await axios.put(childManifestIngestUrl, childManifestFileContent, {
+            await axios.put(segmentIngestUrl, newSegmentContent, {
                 headers: {
-                    'Content-Type': 'application/vnd.apple.mpegurl',
+                    'Content-Type': 'video/MP2T',
                 },
             });
-            
-            //await uploadManifestSegmentsToS3(path.join(manifestDir, childManifestFile), childManifestFileContent);
-            console.log(`Uploaded child manifest: ${childManifestIngestUrl}`);
+            console.log(`Uploaded segment: ${segment}`);
         }
-        
+        const childManifestIngestUrl = mediaPackageIngestUrl.replace('index', childManifestFile);
+        const childManifestFileContent = generateHLSChildManifest(newSegmentList, segmentDuration);
+        fs.writeFileSync(path.join(manifestDir, childManifestFile), childManifestFileContent);
+        const childManifestIngestContent = fs.readFileSync(path.join(manifestDir, childManifestFile));
+
+        await axios.put(childManifestIngestUrl, childManifestIngestContent , {
+            headers: {
+                'Content-Type': 'application/vnd.apple.mpegurl',
+            },
+        });
+        console.log(`Uploaded child manifest: ${childManifestIngestUrl}`);
+        console.log(childManifestIngestContent);
+
+        const mainManifest = generateMainManifest(streamConfigs);
+        fs.writeFileSync(path.join(manifestDir, mainManifestName), mainManifest);
+
         const mainManifestIngestUrl = `${mediaPackageIngestUrl}.m3u8`
-        console.log(`Uploading main manifest: ${mainManifestIngestUrl}`);
+        const mainManifestContent = fs.readFileSync(path.join(manifestDir, mainManifestName));
+        console.log(`Uploading main manifest to: ${mainManifestIngestUrl}`);
+        console.log(mainManifestContent);
         await axios.put(mainManifestIngestUrl, mainManifestContent, {
             headers: {
                 'Content-Type': 'application/vnd.apple.mpegurl',
