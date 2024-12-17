@@ -14,6 +14,7 @@ let currentSequenceNo = 560;
 const segmentDuration = '6.00000';
 const childManifestFile = 'index1080p.m3u8';
 const segmentNamePrefix = 'index1080p_hls';
+const mainManifestName = 'index.m3u8';
 
 const streamConfigs = [
     {
@@ -70,7 +71,7 @@ const downloadManifestAndSegments = async (manifestUrl, downloadDir) => {
     }
 };
 
-const generateHLSChildManifest = (segments, segmentDuration) => {
+const generateHLSChildManifest = (segments) => {
     const programDateTime = new Date().toISOString();
     let manifest = "#EXTM3U\n";
     manifest += "#EXT-X-VERSION:3\n";
@@ -101,47 +102,49 @@ const generateMainManifest = (streams) => {
 const ingestHlsToMediaPackage = async (manifestDir) => {
     try {
         const segments = [
-            'index1080p_hls_00560.ts',
-            'index1080p_hls_00561.ts',
-            'index1080p_hls_00562.ts',
-            'index1080p_hls_00563.ts',
-            'index1080p_hls_00564.ts',
-            'index1080p_hls_00565.ts',
-            'index1080p_hls_00566.ts',
-            'index1080p_hls_00567.ts',
-            'index1080p_hls_00568.ts',
-            'index1080p_hls_00569.ts',
+            'index1080p_hls_00660.ts',
+            'index1080p_hls_00661.ts',
+            'index1080p_hls_00662.ts',
+            'index1080p_hls_00663.ts',
+            'index1080p_hls_00664.ts',
+            'index1080p_hls_00665.ts',
+            'index1080p_hls_00666.ts',
+            'index1080p_hls_00667.ts',
+            'index1080p_hls_00668.ts',
+            'index1080p_hls_00669.ts',
         ];
         const newSegmentList = [];
         for (const [index, segment] of segments.entries()) {
             const newSegmentName = `${segmentNamePrefix}_00${currentSequenceNo + index}.ts`;
             newSegmentList.push(newSegmentName);
+
             const segmentIngestUrl = mediaPackageIngestUrl.replace('index', newSegmentName);
-            const segmentData = fs.readFileSync(path.join(manifestDir, segment));           
-            await axios.put(segmentIngestUrl, segmentData, {
-                headers: { 'Content-Type': 'video/MP2T' },
+            fs.writeFileSync(newSegmentPath, fs.readFileSync(path.join(manifestDir, segment)));
+
+            await axios.put(segmentIngestUrl, fs.readFileSync(path.join(manifestDir, newSegmentName)) , {
+                headers: {
+                    'Content-Type': 'video/MP2T',
+                },
             });
-            console.log(`Uploaded segment: ${newSegmentName}`);
+            console.log(`Uploading segment to: ${segmentIngestUrl}`);
         }
         const childManifestIngestUrl = mediaPackageIngestUrl.replace('index', childManifestFile);
-        const childManifestFileContent = generateHLSChildManifest(newSegmentList, segmentDuration);
-
-        await axios.put(childManifestIngestUrl, childManifestFileContent , {
+        fs.writeFileSync(path.join(manifestDir, childManifestFile), generateHLSChildManifest(newSegmentList));
+        await axios.put(childManifestIngestUrl, fs.readFileSync(path.join(manifestDir, childManifestFile)), {
             headers: {
                 'Content-Type': 'application/vnd.apple.mpegurl',
             },
         });
         console.log(`Uploaded child manifest: ${childManifestIngestUrl}`);
 
-        const mainManifestContent = generateMainManifest(streamConfigs);
-        const mainManifestIngestUrl = `${mediaPackageIngestUrl}.m3u8`
-        console.log(`Uploading main manifest to: ${mainManifestIngestUrl}`);
-        await axios.put(mainManifestIngestUrl, mainManifestContent, {
+        fs.writeFileSync(path.join(manifestDir, mainManifestName), generateMainManifest(streamConfigs));
+        const mainManifestIngestUrl = `${mediaPackageIngestUrl}.m3u8`;
+        await axios.put(mainManifestIngestUrl, fs.readFileSync(path.join(manifestDir, mainManifestName)), {
             headers: {
                 'Content-Type': 'application/vnd.apple.mpegurl',
             },
         });
-        console.log('Main Manifest uploaded successfully.');
+        console.log(`Uploading main manifest to: ${mainManifestIngestUrl}`);
     } catch (error) {
         console.error('Error during HLS ingestion:', error.message);
     }
