@@ -100,6 +100,7 @@ const generateMainManifest = (streams) => {
 }
 
 const ingestHlsToMediaPackage = async (manifestDir) => {
+    const modifiedManifestSegmentDir = path.join(manifestDir, 'upload');
     try {
         const segments = [
             'index1080p_hls_00660.ts',
@@ -118,28 +119,30 @@ const ingestHlsToMediaPackage = async (manifestDir) => {
             const newSegmentName = `${segmentNamePrefix}_00${currentSequenceNo + index}.ts`;
             newSegmentList.push(newSegmentName);
 
+            const modifiedSegmentLocation = path.join(modifiedManifestSegmentDir, newSegmentName);
             const segmentIngestUrl = mediaPackageIngestUrl.replace('index', newSegmentName);
-            fs.writeFileSync(newSegmentPath, fs.readFileSync(path.join(manifestDir, segment)));
-
-            await axios.put(segmentIngestUrl, fs.readFileSync(path.join(manifestDir, newSegmentName)) , {
+            fs.writeFileSync(modifiedSegmentLocation, fs.readFileSync(path.join(manifestDir, segment)));
+            await axios.put(segmentIngestUrl, fs.readFileSync(modifiedSegmentLocation), {
                 headers: {
                     'Content-Type': 'video/MP2T',
                 },
             });
             console.log(`Uploading segment to: ${segmentIngestUrl}`);
         }
+        const childManifestLocation = path.join(modifiedManifestSegmentDir, childManifestFile);
         const childManifestIngestUrl = mediaPackageIngestUrl.replace('index', childManifestFile);
-        fs.writeFileSync(path.join(manifestDir, childManifestFile), generateHLSChildManifest(newSegmentList));
-        await axios.put(childManifestIngestUrl, fs.readFileSync(path.join(manifestDir, childManifestFile)), {
+        fs.writeFileSync(childManifestLocation, generateHLSChildManifest(newSegmentList));
+        await axios.put(childManifestIngestUrl, fs.readFileSync(childManifestLocation), {
             headers: {
                 'Content-Type': 'application/vnd.apple.mpegurl',
             },
         });
         console.log(`Uploaded child manifest: ${childManifestIngestUrl}`);
 
-        fs.writeFileSync(path.join(manifestDir, mainManifestName), generateMainManifest(streamConfigs));
+        const mainManifestLocation = path.join(modifiedManifestSegmentDir, mainManifestName);
         const mainManifestIngestUrl = `${mediaPackageIngestUrl}.m3u8`;
-        await axios.put(mainManifestIngestUrl, fs.readFileSync(path.join(manifestDir, mainManifestName)), {
+        fs.writeFileSync(mainManifestLocation, generateMainManifest(streamConfigs));
+        await axios.put(mainManifestIngestUrl, fs.readFileSync(mainManifestLocation), {
             headers: {
                 'Content-Type': 'application/vnd.apple.mpegurl',
             },
