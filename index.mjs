@@ -10,7 +10,7 @@ const s3Client = new S3Client({ region: 'eu-north-1' });
 const ffmpegPath = 'ffmpeg';
 
 const mediaPackageIngestUrl = '';
-let currentSequenceNo = 660; // (any number) used start time over window in mediapackage 60s
+let currentSequenceNo = 200; // (any number) used start time over window in mediapackage 60s
 const segmentDuration = '6.00000';
 const childManifestFile = 'index1080p.m3u8';
 const segmentNamePrefix = 'index1080p_hls';
