@@ -101,16 +101,16 @@ const generateMainManifest = (streams) => {
 const ingestHlsToMediaPackage = async (manifestDir) => {
     try {
         const segments = [
-            'index1080p_hls_00660.ts',
-            'index1080p_hls_00661.ts',
-            'index1080p_hls_00662.ts',
-            'index1080p_hls_00663.ts',
-            'index1080p_hls_00664.ts',
-            'index1080p_hls_00665.ts',
-            'index1080p_hls_00666.ts',
-            'index1080p_hls_00667.ts',
-            'index1080p_hls_00668.ts',
-            'index1080p_hls_00669.ts',
+            '1.ts',
+            '2.ts',
+            '3.ts',
+            '4.ts',
+            '5.ts',
+            '6.ts',
+            '7.ts',
+            '8.ts',
+            '9.ts',
+            '10.ts'
         ];
         const newSegmentList = [];
         for (const [index, segment] of segments.entries()) {
