@@ -101,6 +101,7 @@ const generateMainManifest = (streams) => {
 
 const ingestHlsToMediaPackage = async (manifestDir) => {
     const modifiedManifestSegmentDir = path.join(manifestDir, 'upload');
+    fs.mkdirSync(modifiedManifestSegmentDir, { recursive: true });
     try {
         const segments = [
             'index1080p_hls_00660.ts',
