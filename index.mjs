@@ -10,11 +10,10 @@ const s3Client = new S3Client({ region: 'eu-north-1' });
 const ffmpegPath = 'ffmpeg';
 
 const mediaPackageIngestUrl = '';
-let currentSequenceNo = 560;
+let currentSequenceNo = 660; // (any number) used start time over window in mediapackage 60s
 const segmentDuration = '6.00000';
 const childManifestFile = 'index1080p.m3u8';
 const segmentNamePrefix = 'index1080p_hls';
-const mainManifestName = 'index.m3u8';
 
 const streamConfigs = [
     {
@@ -100,8 +99,6 @@ const generateMainManifest = (streams) => {
 }
 
 const ingestHlsToMediaPackage = async (manifestDir) => {
-    const modifiedManifestSegmentDir = path.join(manifestDir, 'upload');
-    fs.mkdirSync(modifiedManifestSegmentDir, { recursive: true });
     try {
         const segments = [
             'index1080p_hls_00660.ts',
@@ -120,30 +117,23 @@ const ingestHlsToMediaPackage = async (manifestDir) => {
             const newSegmentName = `${segmentNamePrefix}_00${currentSequenceNo + index}.ts`;
             newSegmentList.push(newSegmentName);
 
-            const modifiedSegmentLocation = path.join(modifiedManifestSegmentDir, newSegmentName);
             const segmentIngestUrl = mediaPackageIngestUrl.replace('index', newSegmentName);
-            fs.writeFileSync(modifiedSegmentLocation, fs.readFileSync(path.join(manifestDir, segment)));
-            await axios.put(segmentIngestUrl, fs.readFileSync(modifiedSegmentLocation), {
+            await axios.put(segmentIngestUrl, fs.readFileSync(path.join(manifestDir, segment)), {
                 headers: {
                     'Content-Type': 'video/MP2T',
                 },
             });
             console.log(`Uploading segment to: ${segmentIngestUrl}`);
         }
-        const childManifestLocation = path.join(modifiedManifestSegmentDir, childManifestFile);
         const childManifestIngestUrl = mediaPackageIngestUrl.replace('index', childManifestFile);
-        fs.writeFileSync(childManifestLocation, generateHLSChildManifest(newSegmentList));
-        await axios.put(childManifestIngestUrl, fs.readFileSync(childManifestLocation), {
+        await axios.put(childManifestIngestUrl, generateHLSChildManifest(newSegmentList), {
             headers: {
                 'Content-Type': 'application/vnd.apple.mpegurl',
             },
         });
         console.log(`Uploaded child manifest: ${childManifestIngestUrl}`);
-
-        const mainManifestLocation = path.join(modifiedManifestSegmentDir, mainManifestName);
         const mainManifestIngestUrl = `${mediaPackageIngestUrl}.m3u8`;
-        fs.writeFileSync(mainManifestLocation, generateMainManifest(streamConfigs));
-        await axios.put(mainManifestIngestUrl, fs.readFileSync(mainManifestLocation), {
+        await axios.put(mainManifestIngestUrl, generateMainManifest(streamConfigs), {
             headers: {
                 'Content-Type': 'application/vnd.apple.mpegurl',
             },
